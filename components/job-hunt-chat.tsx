@@ -12,12 +12,30 @@ interface Message {
 }
 
 interface AnalysisResult {
-  summary?: string;
-  strengths?: string[];
-  improvements?: string[];
-  matchScore?: number;
-  suggestions?: string[];
-  error?: string;
+  status?: "success" | "error";
+  message?: string;
+  result?: {
+    match_score?: string;
+    cv_analysis?: {
+      missing_keywords?: string[];
+      skills_to_add?: string[];
+      experience_improvements?: string[];
+      ats_tips?: string[];
+    };
+    cover_letter_analysis?: {
+      issues?: string[];
+      improvements?: string[];
+      rewritten_cover_letter?: string;
+    };
+    job_alignment?: {
+      strengths?: string[];
+      gaps?: string[];
+      recommendations?: string[];
+    };
+    general_feedback?: string[];
+    error?: string;
+    raw?: string;
+  };
 }
 
 export function JobHuntChat() {
@@ -73,8 +91,8 @@ export function JobHuntChat() {
     try {
       const formData = new FormData();
       formData.append("cv", cvFile);
-      formData.append("coverLetter", coverLetterFile);
-      formData.append("jobUrl", jobUrl);
+      formData.append("cover_letter", coverLetterFile);
+      formData.append("url", jobUrl);
 
       const response = await fetch("/api/analyze-cv", {
         method: "POST",
@@ -107,33 +125,79 @@ export function JobHuntChat() {
   };
 
   const formatAnalysisResult = (data: AnalysisResult): string => {
-    if (data.error) {
-      return `Error: ${data.error}`;
+    if (data.status === "error" || data.message) {
+      return `Error: ${data.message || "Unknown error occurred"}`;
     }
 
-    let result = "";
-
-    if (data.matchScore !== undefined) {
-      result += `**Match Score: ${data.matchScore}%**\n\n`;
+    const result = data.result;
+    if (!result) {
+      return JSON.stringify(data, null, 2);
     }
 
-    if (data.summary) {
-      result += `**Summary**\n${data.summary}\n\n`;
+    if (result.error) {
+      return `Error: ${result.error}\n\n${result.raw || ""}`;
     }
 
-    if (data.strengths && data.strengths.length > 0) {
-      result += `**Strengths**\n${data.strengths.map((s) => `- ${s}`).join("\n")}\n\n`;
+    let output = "";
+
+    if (result.match_score !== undefined) {
+      output += `**Match Score: ${result.match_score}%**\n\n`;
     }
 
-    if (data.improvements && data.improvements.length > 0) {
-      result += `**Areas for Improvement**\n${data.improvements.map((i) => `- ${i}`).join("\n")}\n\n`;
+    // CV Analysis
+    if (result.cv_analysis) {
+      output += `**CV Analysis**\n\n`;
+      
+      if (result.cv_analysis.missing_keywords?.length) {
+        output += `*Missing Keywords:*\n${result.cv_analysis.missing_keywords.map((k) => `- ${k}`).join("\n")}\n\n`;
+      }
+      if (result.cv_analysis.skills_to_add?.length) {
+        output += `*Skills to Add:*\n${result.cv_analysis.skills_to_add.map((s) => `- ${s}`).join("\n")}\n\n`;
+      }
+      if (result.cv_analysis.experience_improvements?.length) {
+        output += `*Experience Improvements:*\n${result.cv_analysis.experience_improvements.map((e) => `- ${e}`).join("\n")}\n\n`;
+      }
+      if (result.cv_analysis.ats_tips?.length) {
+        output += `*ATS Tips:*\n${result.cv_analysis.ats_tips.map((t) => `- ${t}`).join("\n")}\n\n`;
+      }
     }
 
-    if (data.suggestions && data.suggestions.length > 0) {
-      result += `**Suggestions**\n${data.suggestions.map((s) => `- ${s}`).join("\n")}`;
+    // Cover Letter Analysis
+    if (result.cover_letter_analysis) {
+      output += `**Cover Letter Analysis**\n\n`;
+      
+      if (result.cover_letter_analysis.issues?.length) {
+        output += `*Issues:*\n${result.cover_letter_analysis.issues.map((i) => `- ${i}`).join("\n")}\n\n`;
+      }
+      if (result.cover_letter_analysis.improvements?.length) {
+        output += `*Improvements:*\n${result.cover_letter_analysis.improvements.map((i) => `- ${i}`).join("\n")}\n\n`;
+      }
+      if (result.cover_letter_analysis.rewritten_cover_letter) {
+        output += `*Suggested Rewrite:*\n${result.cover_letter_analysis.rewritten_cover_letter}\n\n`;
+      }
     }
 
-    return result || JSON.stringify(data, null, 2);
+    // Job Alignment
+    if (result.job_alignment) {
+      output += `**Job Alignment**\n\n`;
+      
+      if (result.job_alignment.strengths?.length) {
+        output += `*Strengths:*\n${result.job_alignment.strengths.map((s) => `- ${s}`).join("\n")}\n\n`;
+      }
+      if (result.job_alignment.gaps?.length) {
+        output += `*Gaps:*\n${result.job_alignment.gaps.map((g) => `- ${g}`).join("\n")}\n\n`;
+      }
+      if (result.job_alignment.recommendations?.length) {
+        output += `*Recommendations:*\n${result.job_alignment.recommendations.map((r) => `- ${r}`).join("\n")}\n\n`;
+      }
+    }
+
+    // General Feedback
+    if (result.general_feedback?.length) {
+      output += `**General Feedback**\n${result.general_feedback.map((f) => `- ${f}`).join("\n")}`;
+    }
+
+    return output || JSON.stringify(data, null, 2);
   };
 
   const canSubmit = cvFile && coverLetterFile && jobUrl.trim() && !isLoading;

@@ -5,60 +5,51 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
 
     const cv = formData.get("cv") as File | null;
-    const coverLetter = formData.get("coverLetter") as File | null;
-    const jobUrl = formData.get("jobUrl") as string | null;
+    const coverLetter = formData.get("cover_letter") as File | null;
+    const jobUrl = formData.get("url") as string | null;
 
     if (!cv || !coverLetter || !jobUrl) {
       return NextResponse.json(
-        { error: "Missing required fields: cv, coverLetter, or jobUrl" },
+        { error: "Missing required fields: cv, cover_letter, or url" },
         { status: 400 }
       );
     }
 
-    // Extract file contents
-    const cvText = await cv.text();
-    const coverLetterText = await coverLetter.text();
+    // Get the Flask backend URL from environment variable, fallback to localhost
+    const backendUrl = process.env.FLASK_BACKEND_URL || "http://127.0.0.1:5000";
 
-    // For now, return a mock analysis response
-    // In production, you would send this data to your actual AI analysis service
-    const analysisResult = {
-      matchScore: 78,
-      summary: `Analysis of your application for the position at ${new URL(jobUrl).hostname}. Your CV and cover letter have been reviewed against the job requirements.`,
-      strengths: [
-        "Strong technical skills alignment with job requirements",
-        "Clear demonstration of relevant experience",
-        "Well-structured cover letter with compelling narrative",
-      ],
-      improvements: [
-        "Consider adding more quantifiable achievements",
-        "Tailor technical keywords to match job description",
-        "Strengthen the opening paragraph of cover letter",
-      ],
-      suggestions: [
-        "Add metrics to demonstrate impact in previous roles",
-        "Include specific technologies mentioned in the job posting",
-        "Consider reorganizing skills section for better visibility",
-      ],
-      filesReceived: {
-        cv: {
-          name: cv.name,
-          size: cv.size,
-          contentPreview: cvText.substring(0, 100) + "...",
-        },
-        coverLetter: {
-          name: coverLetter.name,
-          size: coverLetter.size,
-          contentPreview: coverLetterText.substring(0, 100) + "...",
-        },
-      },
-      jobUrl: jobUrl,
-    };
+    // Forward the request to the Flask backend
+    const flaskFormData = new FormData();
+    flaskFormData.append("cv", cv);
+    flaskFormData.append("cover_letter", coverLetter);
+    flaskFormData.append("url", jobUrl);
 
-    return NextResponse.json(analysisResult);
+    const response = await fetch(`${backendUrl}/api/analyze-cv`, {
+      method: "POST",
+      body: flaskFormData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return NextResponse.json(
+        { 
+          status: "error",
+          message: errorData.error || errorData.message || "Failed to analyze application" 
+        },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+
   } catch (error) {
     console.error("Error processing request:", error);
     return NextResponse.json(
-      { error: "Failed to process the analysis request" },
+      { 
+        status: "error",
+        message: error instanceof Error ? error.message : "Failed to process the analysis request" 
+      },
       { status: 500 }
     );
   }
